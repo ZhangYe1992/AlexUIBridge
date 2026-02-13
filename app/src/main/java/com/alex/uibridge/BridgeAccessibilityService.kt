@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -12,7 +13,12 @@ class BridgeAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "AlexBridge"
         var instance: BridgeAccessibilityService? = null
+            private set
     }
+
+    // 缓存最后已知的根节点（解决后台获取问题）
+    private var lastKnownRoot: AccessibilityNodeInfo? = null
+    private var lastRootTimestamp: Long = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -32,35 +38,34 @@ class BridgeAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        lastKnownRoot = null
         Log.d(TAG, "onDestroy - instance cleared")
     }
 
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {
-        // 可以在这里记录事件
+        event?.let {
+            // 缓存从事件中获取的根节点
+            val source = it.source
+            if (source != null) {
+                // 向上遍历找到真正的根节点
+                var root = source
+                var parent = root.parent
+                while (parent != null) {
+                    root = parent
+                    parent = root.parent
+                }
+                lastKnownRoot = root
+                lastRootTimestamp = System.currentTimeMillis()
+                Log.d(TAG, "Cached root from event, windowId: ${it.windowId}")
+            }
+        }
     }
 
     fun getUiTree(): List<Map<String, Any?>> {
         val elements = mutableListOf<Map<String, Any?>>()
         
-        // 尝试多种方式获取窗口
-        var root = rootInActiveWindow
-        
-        // 如果rootInActiveWindow为空，尝试从windows列表获取
-        if (root == null) {
-            Log.d(TAG, "rootInActiveWindow is null, trying windows list")
-            val windows = windows
-            if (windows != null && windows.isNotEmpty()) {
-                // 找到最顶层的窗口
-                for (window in windows) {
-                    val windowRoot = window.root
-                    if (windowRoot != null) {
-                        root = windowRoot
-                        Log.d(TAG, "Found window root: ${window.windowId}")
-                        break
-                    }
-                }
-            }
-        }
+        // 获取根节点（使用多种策略）
+        val root = getRootNodeWithFallback()
         
         Log.d(TAG, "getUiTree called, root=${root != null}")
         
@@ -72,6 +77,64 @@ class BridgeAccessibilityService : AccessibilityService() {
         }
         
         return elements
+    }
+
+    /**
+     * 获取根节点，使用多种 fallback 策略
+     */
+    private fun getRootNodeWithFallback(): AccessibilityNodeInfo? {
+        // 策略1: 直接获取当前窗口
+        var root = rootInActiveWindow
+        if (root != null) {
+            Log.d(TAG, "Got root from rootInActiveWindow")
+            return root
+        }
+
+        // 策略2: 使用缓存的根节点（如果5秒内）
+        val cacheAge = System.currentTimeMillis() - lastRootTimestamp
+        if (lastKnownRoot != null && cacheAge < 5000) {
+            Log.d(TAG, "Using cached root (age: ${cacheAge}ms)")
+            return lastKnownRoot
+        }
+
+        // 策略3: 从 windows 列表中获取
+        try {
+            val windows = windows
+            if (windows != null && windows.isNotEmpty()) {
+                Log.d(TAG, "Found ${windows.size} windows")
+                
+                // 优先找 TYPE_APPLICATION 窗口
+                for (window in windows) {
+                    if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                        val windowRoot = window.root
+                        if (windowRoot != null) {
+                            Log.d(TAG, "Got root from TYPE_APPLICATION window: ${window.windowId}")
+                            return windowRoot
+                        }
+                    }
+                }
+                
+                // 如果没找到，取第一个有 root 的窗口
+                for (window in windows) {
+                    val windowRoot = window.root
+                    if (windowRoot != null) {
+                        Log.d(TAG, "Got root from window: ${window.windowId}, type: ${window.type}")
+                        return windowRoot
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting windows: ${e.message}")
+        }
+
+        // 策略4: 使用过期的缓存（总比没有好）
+        if (lastKnownRoot != null) {
+            Log.w(TAG, "Using expired cached root (age: ${cacheAge}ms)")
+            return lastKnownRoot
+        }
+
+        Log.e(TAG, "All strategies failed to get root node")
+        return null
     }
 
     fun getUiTreeAsJson(): String {
@@ -96,6 +159,10 @@ class BridgeAccessibilityService : AccessibilityService() {
             "class" to (node.className?.toString() ?: ""),
             "package" to (node.packageName?.toString() ?: ""),
             "clickable" to node.isClickable,
+            "focusable" to node.isFocusable,
+            "editable" to node.isEditable,
+            "scrollable" to node.isScrollable,
+            "enabled" to node.isEnabled,
             "x1" to bounds.left,
             "y1" to bounds.top,
             "x2" to bounds.right,

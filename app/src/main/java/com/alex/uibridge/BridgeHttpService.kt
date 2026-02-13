@@ -1,5 +1,6 @@
 package com.alex.uibridge
 
+import android.accessibilityservice.GestureDescription
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Path
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
@@ -106,12 +108,17 @@ class BridgeHttpService : Service() {
                 }
             }
 
-            Log.d(TAG, "Request: ${session.uri}")
+            Log.d(TAG, "Request: ${session.method} ${session.uri}")
 
             val response = when (session.uri) {
                 "/ping" -> handlePing()
                 "/dump" -> handleDump()
                 "/debug" -> handleDebug()
+                "/tap" -> handleTap(session)
+                "/swipe" -> handleSwipe(session)
+                "/back" -> handleBack()
+                "/home" -> handleHome()
+                "/power" -> handlePower()
                 else -> newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, "application/json",
                     """{"error":"Not Found"}""")
             }
@@ -137,15 +144,9 @@ class BridgeHttpService : Service() {
                     """{"error":"Accessibility service not connected","solution":"请在系统设置中开启无障碍权限"}""")
             }
             
-            val root = service.rootInActiveWindow
-            if (root == null) {
-                Log.w(TAG, "rootInActiveWindow is null")
-                return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json",
-                    """{"error":"Cannot access window content","debug":"无障碍服务已连接，但无法获取窗口内容。请检查：1.应用是否在前台 2.是否有悬浮窗权限"}""")
-            }
-            
             val json = service.getUiTreeAsJson()
-            Log.d(TAG, "Returning UI tree with ${service.getUiTree().size} elements")
+            val elements = service.getUiTree()
+            Log.d(TAG, "Returning UI tree with ${elements.size} elements")
             return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", json)
         }
 
@@ -153,11 +154,125 @@ class BridgeHttpService : Service() {
             val service = BridgeAccessibilityService.instance
             val debugInfo = JSONObject().apply {
                 put("accessibility_service", if (service != null) "connected" else "null")
-                put("root_window", if (service?.rootInActiveWindow != null) "available" else "null")
                 put("http_service", if (instance != null) "running" else "null")
             }
             return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json",
                 debugInfo.toString())
+        }
+
+        /**
+         * POST /tap
+         * Body: {"x": 500, "y": 1000}
+         */
+        private fun handleTap(session: IHTTPSession): Response {
+            if (session.method != NanoHTTPD.Method.POST) {
+                return jsonResponse(405, """{"error":"Method not allowed"}""")
+            }
+
+            val params = parseBody(session)
+            val x = params.optInt("x", -1)
+            val y = params.optInt("y", -1)
+
+            if (x < 0 || y < 0) {
+                return jsonResponse(400, """{"error":"Missing x or y parameter"}""")
+            }
+
+            val success = performTap(x.toFloat(), y.toFloat())
+            return jsonResponse(if (success) 200 else 500, 
+                """{"ok":$success,"action":"tap","x":$x,"y":$y}""")
+        }
+
+        /**
+         * POST /swipe
+         * Body: {"x1": 500, "y1": 1500, "x2": 500, "y2": 500, "duration": 300}
+         */
+        private fun handleSwipe(session: IHTTPSession): Response {
+            if (session.method != NanoHTTPD.Method.POST) {
+                return jsonResponse(405, """{"error":"Method not allowed"}""")
+            }
+
+            val params = parseBody(session)
+            val x1 = params.optInt("x1", -1)
+            val y1 = params.optInt("y1", -1)
+            val x2 = params.optInt("x2", -1)
+            val y2 = params.optInt("y2", -1)
+            val duration = params.optInt("duration", 300)
+
+            if (x1 < 0 || y1 < 0 || x2 < 0 || y2 < 0) {
+                return jsonResponse(400, """{"error":"Missing coordinates"}""")
+            }
+
+            val success = performSwipe(x1.toFloat(), y1.toFloat(), x2.toFloat(), y2.toFloat(), duration)
+            return jsonResponse(if (success) 200 else 500,
+                """{"ok":$success,"action":"swipe","x1":$x1,"y1":$y1,"x2":$x2,"y2":$y2,"duration":$duration}""")
+        }
+
+        private fun handleBack(): Response {
+            val service = BridgeAccessibilityService.instance
+            val success = service?.performGlobalAction(GLOBAL_ACTION_BACK) ?: false
+            return jsonResponse(if (success) 200 else 500, """{"ok":$success,"action":"back"}""")
+        }
+
+        private fun handleHome(): Response {
+            val service = BridgeAccessibilityService.instance
+            val success = service?.performGlobalAction(GLOBAL_ACTION_HOME) ?: false
+            return jsonResponse(if (success) 200 else 500, """{"ok":$success,"action":"home"}""")
+        }
+
+        private fun handlePower(): Response {
+            val service = BridgeAccessibilityService.instance
+            val success = service?.performGlobalAction(GLOBAL_ACTION_POWER_DIALOG) ?: false
+            return jsonResponse(if (success) 200 else 500, """{"ok":$success,"action":"power"}""")
+        }
+
+        private fun performTap(x: Float, y: Float): Boolean {
+            val service = BridgeAccessibilityService.instance ?: return false
+            
+            val path = Path().apply {
+                moveTo(x, y)
+            }
+            
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 100))
+                .build()
+            
+            return service.dispatchGesture(gesture, null, null)
+        }
+
+        private fun performSwipe(x1: Float, y1: Float, x2: Float, y2: Float, duration: Int): Boolean {
+            val service = BridgeAccessibilityService.instance ?: return false
+            
+            val path = Path().apply {
+                moveTo(x1, y1)
+                lineTo(x2, y2)
+            }
+            
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, duration.toLong()))
+                .build()
+            
+            return service.dispatchGesture(gesture, null, null)
+        }
+
+        private fun parseBody(session: IHTTPSession): JSONObject {
+            return try {
+                val map = HashMap<String, String>()
+                session.parseBody(map)
+                val body = map["postData"] ?: "{}"
+                JSONObject(body)
+            } catch (e: Exception) {
+                JSONObject()
+            }
+        }
+
+        private fun jsonResponse(status: Int, body: String): Response {
+            val statusCode = when (status) {
+                200 -> NanoHTTPD.Response.Status.OK
+                400 -> NanoHTTPD.Response.Status.BAD_REQUEST
+                405 -> NanoHTTPD.Response.Status.METHOD_NOT_ALLOWED
+                else -> NanoHTTPD.Response.Status.INTERNAL_ERROR
+            }
+            return newFixedLengthResponse(statusCode, "application/json", body)
         }
     }
 }

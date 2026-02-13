@@ -9,6 +9,7 @@ import android.os.Looper
 import android.view.View
 import android.view.WindowManager
 import android.util.Log
+import android.os.Build
 
 /**
  * 透明保活 Activity
@@ -37,6 +38,11 @@ class TransparentKeepAliveActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "TransparentKeepAliveActivity onCreate")
+
+        // 在最近任务中隐藏 - 必须在 setContentView 之前
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            setExcludeFromRecents(true)
+        }
 
         // 设置窗口属性 - 关键！
         setupWindow()
@@ -75,9 +81,6 @@ class TransparentKeepAliveActivity : Activity() {
                       WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
 
         window.attributes = params
-
-        // 设置为最近任务中隐藏
-        setExcludeFromRecents(true)
     }
 
     override fun onResume() {
