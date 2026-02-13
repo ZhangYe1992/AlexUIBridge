@@ -36,12 +36,31 @@ class BridgeAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {
-        // 可以在这里记录事件，但当前不需要
+        // 可以在这里记录事件
     }
 
     fun getUiTree(): List<Map<String, Any?>> {
         val elements = mutableListOf<Map<String, Any?>>()
-        val root = rootInActiveWindow
+        
+        // 尝试多种方式获取窗口
+        var root = rootInActiveWindow
+        
+        // 如果rootInActiveWindow为空，尝试从windows列表获取
+        if (root == null) {
+            Log.d(TAG, "rootInActiveWindow is null, trying windows list")
+            val windows = windows
+            if (windows != null && windows.isNotEmpty()) {
+                // 找到最顶层的窗口
+                for (window in windows) {
+                    val windowRoot = window.root
+                    if (windowRoot != null) {
+                        root = windowRoot
+                        Log.d(TAG, "Found window root: ${window.windowId}")
+                        break
+                    }
+                }
+            }
+        }
         
         Log.d(TAG, "getUiTree called, root=${root != null}")
         
@@ -49,7 +68,7 @@ class BridgeAccessibilityService : AccessibilityService() {
             traverseNode(it, elements, 0)
             Log.d(TAG, "Traversed ${elements.size} elements")
         } ?: run {
-            Log.w(TAG, "rootInActiveWindow is null")
+            Log.w(TAG, "No root window available")
         }
         
         return elements
