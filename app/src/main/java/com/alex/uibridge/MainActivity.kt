@@ -2,11 +2,13 @@ package com.alex.uibridge
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.format.Formatter
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -44,6 +46,8 @@ import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
+    private val TAG = "AlexUIBridge"
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -59,6 +63,9 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
+
+        // 检查并请求悬浮窗权限
+        checkOverlayPermission()
 
         setContent {
             AlexUIBridgeTheme {
@@ -87,6 +94,19 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun checkOverlayPermission() {
+        if (!Settings.canDrawOverlays(this)) {
+            Log.d(TAG, "请求悬浮窗权限")
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
+        } else {
+            Log.d(TAG, "已有悬浮窗权限")
+        }
+    }
 }
 
 @Composable
@@ -96,6 +116,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
 
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
     var isHttpServiceRunning by remember { mutableStateOf(false) }
+    var hasOverlayPermission by remember { mutableStateOf(false) }
     var ipAddress by remember { mutableStateOf("") }
 
     // 定期检查服务状态
@@ -103,6 +124,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
         while (true) {
             isAccessibilityEnabled = BridgeAccessibilityService.instance != null
             isHttpServiceRunning = BridgeHttpService.instance != null
+            hasOverlayPermission = Settings.canDrawOverlays(context)
             ipAddress = getDeviceIpAddress(context)
             delay(1000)
         }
@@ -127,11 +149,28 @@ fun MainScreen(modifier: Modifier = Modifier) {
         StatusCard(
             isAccessibilityEnabled = isAccessibilityEnabled,
             isHttpServiceRunning = isHttpServiceRunning,
+            hasOverlayPermission = hasOverlayPermission,
             ipAddress = ipAddress,
             port = 8080
         )
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // 开启悬浮窗权限按钮
+        if (!hasOverlayPermission) {
+            Button(
+                onClick = {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("开启悬浮窗权限（后台获取UI需要）")
+            }
+        }
 
         // 开启无障碍权限按钮
         Button(
@@ -168,6 +207,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
 fun StatusCard(
     isAccessibilityEnabled: Boolean,
     isHttpServiceRunning: Boolean,
+    hasOverlayPermission: Boolean,
     ipAddress: String,
     port: Int,
     modifier: Modifier = Modifier
@@ -193,6 +233,11 @@ fun StatusCard(
             StatusItem(
                 label = "无障碍服务",
                 isEnabled = isAccessibilityEnabled
+            )
+
+            StatusItem(
+                label = "悬浮窗权限",
+                isEnabled = hasOverlayPermission
             )
 
             StatusItem(
@@ -224,7 +269,7 @@ fun StatusItem(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = if (isEnabled) "运行中" else "未启动",
+            text = if (isEnabled) "✅ 已开启" else "❌ 未开启",
             style = MaterialTheme.typography.bodyLarge,
             color = if (isEnabled) {
                 MaterialTheme.colorScheme.primary
