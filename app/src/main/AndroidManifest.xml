@@ -49,6 +49,18 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- 透明保活 Activity（关键！让系统认为APP在前台） -->
+        <activity
+            android:name=".TransparentKeepAliveActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+            </intent-filter>
+        </activity>
+
         <!-- 悬浮按钮服务（核心） -->
         <service
             android:name=".FloatingButtonService"

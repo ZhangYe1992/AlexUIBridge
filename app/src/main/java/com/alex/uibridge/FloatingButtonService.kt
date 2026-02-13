@@ -40,6 +40,10 @@ class FloatingButtonService : Service() {
         Log.d(TAG, "FloatingButtonService created")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
+        
+        // 启动透明保活 Activity（关键！）
+        startKeepAliveActivity()
+        
         createFloatingButton()
         isRunning = true
     }
@@ -186,6 +190,20 @@ class FloatingButtonService : Service() {
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .build()
+        }
+    }
+
+    private fun startKeepAliveActivity() {
+        try {
+            Log.d(TAG, "启动透明保活 Activity")
+            val intent = Intent(this, TransparentKeepAliveActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            Log.d(TAG, "透明保活 Activity 已启动")
+        } catch (e: Exception) {
+            Log.e(TAG, "启动透明保活 Activity 失败: ${e.message}")
+            e.printStackTrace()
         }
     }
 }

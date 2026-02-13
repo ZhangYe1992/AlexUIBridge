@@ -116,6 +116,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
     var isHttpServiceRunning by remember { mutableStateOf(false) }
     var isFloatingButtonRunning by remember { mutableStateOf(false) }
+    var isKeepAliveRunning by remember { mutableStateOf(false) }
     var hasOverlayPermission by remember { mutableStateOf(false) }
     var ipAddress by remember { mutableStateOf("") }
 
@@ -125,6 +126,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
             isAccessibilityEnabled = BridgeAccessibilityService.instance != null
             isHttpServiceRunning = BridgeHttpService.instance != null
             isFloatingButtonRunning = FloatingButtonService.isRunning
+            isKeepAliveRunning = TransparentKeepAliveActivity.isRunning
             hasOverlayPermission = Settings.canDrawOverlays(context)
             ipAddress = getDeviceIpAddress(context)
             delay(1000)
@@ -151,6 +153,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
             isAccessibilityEnabled = isAccessibilityEnabled,
             isHttpServiceRunning = isHttpServiceRunning,
             isFloatingButtonRunning = isFloatingButtonRunning,
+            isKeepAliveRunning = isKeepAliveRunning,
             hasOverlayPermission = hasOverlayPermission,
             ipAddress = ipAddress,
             port = 8080
@@ -234,6 +237,7 @@ fun StatusCard(
     isAccessibilityEnabled: Boolean,
     isHttpServiceRunning: Boolean,
     isFloatingButtonRunning: Boolean,
+    isKeepAliveRunning: Boolean,
     hasOverlayPermission: Boolean,
     ipAddress: String,
     port: Int,
@@ -265,6 +269,11 @@ fun StatusCard(
             StatusItem(
                 label = "悬浮按钮",
                 isEnabled = isFloatingButtonRunning
+            )
+
+            StatusItem(
+                label = "保活 Activity",
+                isEnabled = isKeepAliveRunning
             )
 
             StatusItem(
