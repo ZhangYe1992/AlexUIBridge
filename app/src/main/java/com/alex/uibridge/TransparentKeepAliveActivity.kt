@@ -39,10 +39,8 @@ class TransparentKeepAliveActivity : Activity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "TransparentKeepAliveActivity onCreate")
 
-        // 在最近任务中隐藏 - 必须在 setContentView 之前
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            setExcludeFromRecents(true)
-        }
+        // 注：setExcludeFromRecents 在 AndroidManifest.xml 中已配置
+        // android:excludeFromRecents="true"
 
         // 设置窗口属性 - 关键！
         setupWindow()
