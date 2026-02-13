@@ -49,11 +49,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- 1像素悬浮窗服务 -->
+        <!-- 悬浮按钮服务（核心） -->
         <service
-            android:name=".PixelOverlayService"
+            android:name=".FloatingButtonService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
     </application>
 

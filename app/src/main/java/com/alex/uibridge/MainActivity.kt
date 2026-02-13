@@ -112,10 +112,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val activity = context as? ComponentActivity
 
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
     var isHttpServiceRunning by remember { mutableStateOf(false) }
+    var isFloatingButtonRunning by remember { mutableStateOf(false) }
     var hasOverlayPermission by remember { mutableStateOf(false) }
     var ipAddress by remember { mutableStateOf("") }
 
@@ -124,6 +124,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
         while (true) {
             isAccessibilityEnabled = BridgeAccessibilityService.instance != null
             isHttpServiceRunning = BridgeHttpService.instance != null
+            isFloatingButtonRunning = FloatingButtonService.isRunning
             hasOverlayPermission = Settings.canDrawOverlays(context)
             ipAddress = getDeviceIpAddress(context)
             delay(1000)
@@ -134,7 +135,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 副标题
         Text(
@@ -143,18 +144,19 @@ fun MainScreen(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // 状态卡片
         StatusCard(
             isAccessibilityEnabled = isAccessibilityEnabled,
             isHttpServiceRunning = isHttpServiceRunning,
+            isFloatingButtonRunning = isFloatingButtonRunning,
             hasOverlayPermission = hasOverlayPermission,
             ipAddress = ipAddress,
             port = 8080
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // 开启悬浮窗权限按钮
         if (!hasOverlayPermission) {
@@ -168,7 +170,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("开启悬浮窗权限（后台获取UI需要）")
+                Text("1. 开启悬浮窗权限")
             }
         }
 
@@ -181,22 +183,27 @@ fun MainScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                if (isAccessibilityEnabled) "无障碍权限已开启" else "开启无障碍权限"
+                if (isAccessibilityEnabled) "2. 无障碍权限已开启 ✅" else "2. 开启无障碍权限"
             )
         }
 
-        // 启动1像素悬浮窗按钮
+        // 启动悬浮按钮服务（核心功能）
         Button(
             onClick = {
-                val intent = Intent(context, PixelOverlayService::class.java)
-                ContextCompat.startForegroundService(context, intent)
+                if (!isFloatingButtonRunning) {
+                    val intent = Intent(context, FloatingButtonService::class.java)
+                    ContextCompat.startForegroundService(context, intent)
+                }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isFloatingButtonRunning
         ) {
-            Text("启动1像素悬浮窗（解决后台读取问题）")
+            Text(
+                if (isFloatingButtonRunning) "3. 悬浮按钮运行中 ✅（可划掉APP）" else "3. 启动悬浮按钮（划掉APP后仍可用）"
+            )
         }
 
-        // 启动HTTP服务按钮
+        // 启动HTTP服务
         Button(
             onClick = {
                 if (!isHttpServiceRunning) {
@@ -208,9 +215,17 @@ fun MainScreen(modifier: Modifier = Modifier) {
             enabled = !isHttpServiceRunning
         ) {
             Text(
-                if (isHttpServiceRunning) "HTTP服务运行中" else "启动HTTP服务"
+                if (isHttpServiceRunning) "4. HTTP服务运行中 ✅" else "4. 启动HTTP服务"
             )
         }
+
+        // 使用说明
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "使用步骤:\n1. 开启悬浮窗权限\n2. 开启无障碍权限\n3. 启动悬浮按钮（关键！）\n4. 启动HTTP服务\n5. 现在可以划掉APP了",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -218,6 +233,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
 fun StatusCard(
     isAccessibilityEnabled: Boolean,
     isHttpServiceRunning: Boolean,
+    isFloatingButtonRunning: Boolean,
     hasOverlayPermission: Boolean,
     ipAddress: String,
     port: Int,
@@ -232,8 +248,8 @@ fun StatusCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
                 text = "服务状态",
@@ -247,8 +263,8 @@ fun StatusCard(
             )
 
             StatusItem(
-                label = "悬浮窗权限",
-                isEnabled = hasOverlayPermission
+                label = "悬浮按钮",
+                isEnabled = isFloatingButtonRunning
             )
 
             StatusItem(
@@ -258,8 +274,8 @@ fun StatusCard(
 
             if (isHttpServiceRunning && ipAddress.isNotEmpty()) {
                 Text(
-                    text = "访问地址: http://$ipAddress:$port",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "地址: http://$ipAddress:$port",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
@@ -276,12 +292,12 @@ fun StatusItem(
     Column(modifier = modifier) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = if (isEnabled) "✅ 已开启" else "❌ 未开启",
-            style = MaterialTheme.typography.bodyLarge,
+            text = if (isEnabled) "✅ 运行中" else "❌ 未启动",
+            style = MaterialTheme.typography.bodyMedium,
             color = if (isEnabled) {
                 MaterialTheme.colorScheme.primary
             } else {
