@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Alex UI Bridge</string>
+    <string name="accessibility_desc">提供HTTP接口获取UI树</string>
+    <string name="channel_name">UI Bridge服务</string>
+    <string name="channel_description">保持HTTP服务运行</string>
+</resources>
