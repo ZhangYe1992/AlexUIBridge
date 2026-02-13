@@ -49,6 +49,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- 1像素悬浮窗服务 -->
+        <service
+            android:name=".PixelOverlayService"
+            android:enabled="true"
+            android:exported="false" />
+
     </application>
 
 </manifest>

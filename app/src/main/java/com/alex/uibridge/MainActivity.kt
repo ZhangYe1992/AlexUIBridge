@@ -185,6 +185,17 @@ fun MainScreen(modifier: Modifier = Modifier) {
             )
         }
 
+        // 启动1像素悬浮窗按钮
+        Button(
+            onClick = {
+                val intent = Intent(context, PixelOverlayService::class.java)
+                ContextCompat.startForegroundService(context, intent)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("启动1像素悬浮窗（解决后台读取问题）")
+        }
+
         // 启动HTTP服务按钮
         Button(
             onClick = {
