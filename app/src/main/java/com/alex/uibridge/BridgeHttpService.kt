@@ -11,13 +11,16 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.text.format.Formatter
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import fi.iki.elonen.NanoHTTPD
+import org.json.JSONObject
 
 class BridgeHttpService : Service() {
 
     private var server: HttpServer? = null
     private val PORT = 8080
+    private val TAG = "AlexBridge"
 
     companion object {
         const val CHANNEL_ID = "uibridge_channel"
@@ -33,7 +36,9 @@ class BridgeHttpService : Service() {
         server = HttpServer(PORT).apply {
             try {
                 start()
+                Log.d(TAG, "HTTP server started on port $PORT")
             } catch (e: Exception) {
+                Log.e(TAG, "Failed to start server: ${e.message}")
                 e.printStackTrace()
             }
         }
@@ -101,9 +106,12 @@ class BridgeHttpService : Service() {
                 }
             }
 
+            Log.d(TAG, "Request: ${session.uri}")
+
             val response = when (session.uri) {
                 "/ping" -> handlePing()
                 "/dump" -> handleDump()
+                "/debug" -> handleDebug()
                 else -> newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, "application/json",
                     """{"error":"Not Found"}""")
             }
@@ -117,18 +125,39 @@ class BridgeHttpService : Service() {
 
         private fun handlePing(): Response {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json",
-                """{"status":"ok"}""")
+                """{"status":"ok","service":"Alex UI Bridge"}""")
         }
 
         private fun handleDump(): Response {
             val service = BridgeAccessibilityService.instance
-            return if (service != null) {
-                val json = service.getUiTreeAsJson()
-                newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", json)
-            } else {
-                newFixedLengthResponse(NanoHTTPD.Response.Status.SERVICE_UNAVAILABLE, "application/json",
-                    """{"error":"Accessibility service not available"}""")
+            
+            if (service == null) {
+                Log.w(TAG, "Accessibility service instance is null")
+                return newFixedLengthResponse(NanoHTTPD.Response.Status.SERVICE_UNAVAILABLE, "application/json",
+                    """{"error":"Accessibility service not connected","solution":"请在系统设置中开启无障碍权限"}""")
             }
+            
+            val root = service.rootInActiveWindow
+            if (root == null) {
+                Log.w(TAG, "rootInActiveWindow is null")
+                return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json",
+                    """{"error":"Cannot access window content","debug":"无障碍服务已连接，但无法获取窗口内容。请检查：1.应用是否在前台 2.是否有悬浮窗权限"}""")
+            }
+            
+            val json = service.getUiTreeAsJson()
+            Log.d(TAG, "Returning UI tree with ${service.getUiTree().size} elements")
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json", json)
+        }
+
+        private fun handleDebug(): Response {
+            val service = BridgeAccessibilityService.instance
+            val debugInfo = JSONObject().apply {
+                put("accessibility_service", if (service != null) "connected" else "null")
+                put("root_window", if (service?.rootInActiveWindow != null) "available" else "null")
+                put("http_service", if (instance != null) "running" else "null")
+            }
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/json",
+                debugInfo.toString())
         }
     }
 }

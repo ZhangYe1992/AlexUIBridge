@@ -2,6 +2,7 @@ package com.alex.uibridge
 
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Rect
+import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONArray
 import org.json.JSONObject
@@ -9,26 +10,48 @@ import org.json.JSONObject
 class BridgeAccessibilityService : AccessibilityService() {
 
     companion object {
+        private const val TAG = "AlexBridge"
         var instance: BridgeAccessibilityService? = null
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        Log.d(TAG, "onCreate called")
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        Log.d(TAG, "onServiceConnected - instance set")
     }
 
     override fun onInterrupt() {
-        // 无障碍服务中断时的处理
+        Log.d(TAG, "onInterrupt")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        instance = null
+        Log.d(TAG, "onDestroy - instance cleared")
     }
 
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {
-        // 监听无障碍事件（可选）
+        // 可以在这里记录事件，但当前不需要
     }
 
     fun getUiTree(): List<Map<String, Any?>> {
         val elements = mutableListOf<Map<String, Any?>>()
         val root = rootInActiveWindow
-        root?.let { traverseNode(it, elements, 0) }
+        
+        Log.d(TAG, "getUiTree called, root=${root != null}")
+        
+        root?.let { 
+            traverseNode(it, elements, 0)
+            Log.d(TAG, "Traversed ${elements.size} elements")
+        } ?: run {
+            Log.w(TAG, "rootInActiveWindow is null")
+        }
+        
         return elements
     }
 
@@ -48,18 +71,18 @@ class BridgeAccessibilityService : AccessibilityService() {
         node.getBoundsInScreen(bounds)
 
         val element = mutableMapOf<String, Any?>(
-            "text" to node.text?.toString(),
-            "desc" to node.contentDescription?.toString(),
-            "id" to node.viewIdResourceName,
-            "class" to node.className?.toString(),
-            "package" to node.packageName?.toString(),
+            "text" to (node.text?.toString() ?: ""),
+            "desc" to (node.contentDescription?.toString() ?: ""),
+            "id" to (node.viewIdResourceName ?: ""),
+            "class" to (node.className?.toString() ?: ""),
+            "package" to (node.packageName?.toString() ?: ""),
             "clickable" to node.isClickable,
-            "bounds" to mapOf(
-                "left" to bounds.left,
-                "top" to bounds.top,
-                "right" to bounds.right,
-                "bottom" to bounds.bottom
-            )
+            "x1" to bounds.left,
+            "y1" to bounds.top,
+            "x2" to bounds.right,
+            "y2" to bounds.bottom,
+            "cx" to (bounds.left + bounds.right) / 2,
+            "cy" to (bounds.top + bounds.bottom) / 2
         )
 
         elements.add(element)
